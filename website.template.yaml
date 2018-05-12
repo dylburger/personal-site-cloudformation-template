@@ -1,6 +1,9 @@
 Description: Infrastructure for personal website
 
 Parameters: 
+    HostedZone:
+        Type: String
+        Description: The root domain we want to create DNS record sets in
     WebsiteDomain:
         Type: String
         Description: The root domain (e.g. cnn.com) of the website
@@ -103,7 +106,7 @@ Resources:
                 HttpVersion: "http2"
                 IPV6Enabled: true
                 Logging:
-                    Bucket: !Join ['.', [!Ref WebsiteCloudfrontLoggingBucketStage 's3.amazonaws.com' ] ]
+                    Bucket: !Join ['.', [!Ref WebsiteCloudfrontLoggingBucketStage, 's3.amazonaws.com' ] ]
                 Origins:
                     -
                         # We use the website URL as the origin in order to serve "clean" URLs with Gatsby.
