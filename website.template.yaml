@@ -1,0 +1,178 @@
+Description: Infrastructure for personal website
+
+Parameters: 
+    WebsiteDomain:
+        Type: String
+        Description: The root domain (e.g. cnn.com) of the website
+    WebsiteHost:
+        Type: String
+        Description: The website host (e.g. www.cnn.com) for the website
+    WebsiteHostStage:
+        Type: String
+        Description: The website host (e.g. www.cnn.com) for the website (stage)
+    CertificateArn:
+        Type: String
+        Description: The ARN of the TLS certificate used to protect the distribution
+    CertificateArnStage:
+        Type: String
+        Description: The ARN of the TLS certificate used to protect the distribution (stage)
+    CloudfrontHostedZoneId:
+        Type: String
+        Description: The hosted zone ID to use for Cloudfront distributions
+        Default: Z2FDTNDATAQYW2
+
+Resources:
+    WebsiteRootDomainBucket:
+        Type: "AWS::S3::Bucket"
+        Properties:
+            AccessControl: "PublicRead"
+            BucketName: !Ref WebsiteDomain
+            WebsiteConfiguration:
+                IndexDocument: index.html
+
+    WebsiteCloudfrontLoggingBucket:
+        Type: "AWS::S3::Bucket"
+        Properties:
+            BucketName: !Join ['-', [ !Ref WebsiteDomain, 'logs' ] ]
+
+    WebsiteBucketStage:
+        Type: "AWS::S3::Bucket"
+        Properties:
+            AccessControl: "PublicRead"
+            BucketName: !Ref WebsiteHostStage
+            WebsiteConfiguration:
+                IndexDocument: index.html
+
+    WebsiteCloudfrontLoggingBucketStage:
+        Type: "AWS::S3::Bucket"
+        Properties:
+            BucketName: !Join ['-', [ !Ref WebsiteHostStage, 'logs' ] ]
+
+    WebsiteCloudfrontDistribution:
+        Type: "AWS::CloudFront::Distribution"
+        Properties:
+            DistributionConfig:
+                Aliases:
+                    - !Ref WebsiteDomain
+                    - !Ref WebsiteHost
+                Comment: "Distribution for personal website"
+                DefaultCacheBehavior:
+                    Compress: true
+                    ForwardedValues:
+                        QueryString: false
+                        Cookies:
+                            Forward: "none"
+                    TargetOriginId: "website"
+                    ViewerProtocolPolicy: "redirect-to-https"
+                DefaultRootObject: "index.html"
+                Enabled: true
+                HttpVersion: "http2"
+                IPV6Enabled: true
+                Logging:
+                    Bucket: !Join ['.', [!Ref WebsiteCloudfrontLoggingBucket, 's3.amazonaws.com' ] ]
+                Origins:
+                    -
+                        # We use the website URL as the origin in order to serve "clean" URLs with Gatsby.
+                        # See https://www.gatsbyjs.org/docs/deploy-gatsby/ for more info.
+                        DomainName: !Join ['.', [!Ref WebsiteDomain, 's3-website-us-east-1.amazonaws.com' ] ]
+                        Id: "website"
+                        CustomOriginConfig:
+                            HTTPPort: 80
+                            OriginProtocolPolicy: http-only
+                ViewerCertificate:
+                    AcmCertificateArn: !Ref CertificateArn
+                    SslSupportMethod: "sni-only"
+
+    WebsiteCloudfrontDistributionStage:
+        Type: "AWS::CloudFront::Distribution"
+        Properties:
+            DistributionConfig:
+                Aliases:
+                    - !Ref WebsiteHostStage
+                Comment: "STAGE Distribution for personal website"
+                DefaultCacheBehavior:
+                    Compress: true
+                    ForwardedValues:
+                        QueryString: false
+                        Cookies:
+                            Forward: "none"
+                    TargetOriginId: "website"
+                    ViewerProtocolPolicy: "redirect-to-https"
+                DefaultRootObject: "index.html"
+                Enabled: true
+                HttpVersion: "http2"
+                IPV6Enabled: true
+                Logging:
+                    Bucket: !Join ['.', [!Ref WebsiteCloudfrontLoggingBucketStage 's3.amazonaws.com' ] ]
+                Origins:
+                    -
+                        # We use the website URL as the origin in order to serve "clean" URLs with Gatsby.
+                        # See https://www.gatsbyjs.org/docs/deploy-gatsby/ for more info.
+                        DomainName: !Join ['.', [!Ref WebsiteBucketStage, 's3-website-us-east-1.amazonaws.com' ] ]
+                        Id: "website"
+                        CustomOriginConfig:
+                            HTTPPort: 80
+                            OriginProtocolPolicy: http-only
+                ViewerCertificate:
+                    AcmCertificateArn: !Ref CertificateArnStage
+                    SslSupportMethod: "sni-only"
+
+    WebsiteAliasRecordStage:
+        Type: "AWS::Route53::RecordSet"
+        Properties:
+            HostedZoneId: !Ref HostedZone
+            Name: !Ref WebsiteHostStage
+            Type: A
+            AliasTarget:
+                DNSName: !GetAtt WebsiteCloudfrontDistributionStage.DomainName
+                HostedZoneId: !Ref CloudfrontHostedZoneId
+
+    WebsiteAliasAAAARecordStage:
+        Type: "AWS::Route53::RecordSet"
+        Properties:
+            HostedZoneId: !Ref HostedZone
+            Name: !Ref WebsiteHostStage
+            Type: AAAA
+            AliasTarget:
+                DNSName: !GetAtt WebsiteCloudfrontDistributionStage.DomainName
+                HostedZoneId: !Ref CloudfrontHostedZoneId
+
+    WebsiteAliasRecord:
+        Type: "AWS::Route53::RecordSet"
+        Properties:
+            HostedZoneId: !Ref HostedZone
+            Name: !Ref WebsiteHost
+            Type: A
+            AliasTarget:
+                DNSName: !GetAtt WebsiteCloudfrontDistribution.DomainName
+                HostedZoneId: !Ref CloudfrontHostedZoneId
+
+    WebsiteAliasAAAARecord:
+        Type: "AWS::Route53::RecordSet"
+        Properties:
+            HostedZoneId: !Ref HostedZone
+            Name: !Ref WebsiteHost
+            Type: AAAA
+            AliasTarget:
+                DNSName: !GetAtt WebsiteCloudfrontDistribution.DomainName
+                HostedZoneId: !Ref CloudfrontHostedZoneId
+
+    WebsiteAliasRootRecord:
+        Type: "AWS::Route53::RecordSet"
+        Properties:
+            HostedZoneId: !Ref HostedZone
+            Name: !Ref WebsiteDomain
+            Type: A
+            AliasTarget:
+                DNSName: !GetAtt WebsiteCloudfrontDistribution.DomainName
+                HostedZoneId: !Ref CloudfrontHostedZoneId
+
+    WebsiteAliasRootAAAARecord:
+        Type: "AWS::Route53::RecordSet"
+        Properties:
+            HostedZoneId: !Ref HostedZone
+            Name: !Ref WebsiteDomain
+            Type: AAAA
+            AliasTarget:
+                DNSName: !GetAtt WebsiteCloudfrontDistribution.DomainName
+                HostedZoneId: !Ref CloudfrontHostedZoneId
